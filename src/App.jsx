@@ -5,6 +5,7 @@ import OrderManagement from './pages/Orders';
 import Holdings from './pages/Holdings';
 import InstrumentSearch from './pages/InstrumentSearch';
 import DataUploader from './components/DataUploader';
+import Watchlist from './pages/Watchlist';
 import './App.css';
 
 function App() {
@@ -29,6 +30,18 @@ function App() {
               })}
             >
               <LayoutDashboard size={18} /> Dashboard
+            </NavLink>
+            <NavLink
+              to="/watchlist"
+              className={({ isActive }) => `btn ${isActive ? 'btn-primary' : ''}`}
+              style={({ isActive }) => ({
+                justifyContent: 'flex-start',
+                gap: '0.75rem',
+                backgroundColor: isActive ? 'var(--accent-color)' : 'transparent',
+                color: isActive ? 'white' : 'var(--text-secondary)'
+              })}
+            >
+              <List size={18} /> Watchlist
             </NavLink>
             <NavLink
               to="/orders"
@@ -91,6 +104,7 @@ function App() {
 
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/orders" element={<OrderManagement />} />
             <Route path="/holdings" element={<Holdings />} />
             <Route path="/search" element={<InstrumentSearch />} />

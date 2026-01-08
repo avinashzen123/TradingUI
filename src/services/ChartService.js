@@ -1,7 +1,30 @@
+const validateCandleParams = (unit, interval) => {
+    const validUnits = ['minutes', 'hours', 'days', 'weeks', 'months'];
+    if (!validUnits.includes(unit)) {
+        throw new Error(`Invalid unit: ${unit}. Must be one of ${validUnits.join(', ')}`);
+    }
+
+    if (unit === 'minutes') {
+        if (interval < 1 || interval > 300) {
+            throw new Error(`Invalid interval for minutes: ${interval}. Must be between 1 and 300.`);
+        }
+    } else if (unit === 'hours') {
+        if (interval < 1 || interval > 5) {
+            throw new Error(`Invalid interval for hours: ${interval}. Must be between 1 and 5.`);
+        }
+    } else {
+        // days, weeks, months
+        if (interval !== 1) {
+            throw new Error(`Invalid interval for ${unit}: ${interval}. Must be 1.`);
+        }
+    }
+};
+
 export const ChartService = {
-    getHistoricalCandles: async (token, instrumentKey, toDate, fromDate) => {
+    getHistoricalCandles: async (token, instrumentKey, unit, interval, toDate, fromDate) => {
         try {
-            const url = `/api/upstox/v3/historical-candle/${instrumentKey}/hours/1/${toDate}/${fromDate}`;
+            validateCandleParams(unit, interval);
+            const url = `/api/upstox/v3/historical-candle/${instrumentKey}/${unit}/${interval}/${toDate}/${fromDate}`;
             const response = await fetch(url, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -23,6 +46,7 @@ export const ChartService = {
 
     getIntradayCandles: async (token, instrumentKey, unit, interval) => {
         try {
+            validateCandleParams(unit, interval);
             const url = `/api/upstox/v3/historical-candle/intraday/${instrumentKey}/${unit}/${interval}`;
             const response = await fetch(url, {
                 headers: {

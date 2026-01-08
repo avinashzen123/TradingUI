@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { InstrumentService } from '../services/InstrumentService';
-import { Search as SearchIcon, Download, Database, Copy } from 'lucide-react';
+import { addToWatchlist, selectWatchlist } from '../store/watchlistSlice';
+import { Search as SearchIcon, Download, Database, Copy, Plus, Check } from 'lucide-react';
 import ChartModal from '../components/ChartModal';
 
 const InstrumentSearch = () => {
+    const dispatch = useDispatch();
+    const watchlist = useSelector(selectWatchlist);
     const [segment, setSegment] = useState('NSE');
     const [query, setQuery] = useState('');
     const [selectedType, setSelectedType] = useState('');
@@ -57,6 +61,13 @@ const InstrumentSearch = () => {
     const handleCopy = (text) => {
         navigator.clipboard.writeText(text);
         // Optional: toast feedback
+    };
+
+    const isInWatchlist = (key) => watchlist.some(item => item.instrument_key === key);
+
+    const handleAdd = (e, inst) => {
+        e.stopPropagation();
+        dispatch(addToWatchlist(inst));
     };
 
     return (
@@ -140,12 +151,13 @@ const InstrumentSearch = () => {
                                 <th style={{ padding: '0.75rem' }}>Lot Size</th>
                                 <th style={{ padding: '0.75rem' }}>Tick Size</th>
                                 <th style={{ padding: '0.75rem' }}>Details</th>
+                                <th style={{ padding: '0.75rem', width: '80px' }}>Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {results.length === 0 && !loading && (
                                 <tr>
-                                    <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                    <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                                         {query ? 'No matching instruments found.' : 'Start typing to search...'}
                                     </td>
                                 </tr>
@@ -184,6 +196,22 @@ const InstrumentSearch = () => {
                                     <td style={{ padding: '0.75rem' }}>{inst.lot_size}</td>
                                     <td style={{ padding: '0.75rem' }}>{inst.tick_size}</td>
                                     <td style={{ padding: '0.75rem' }}>{inst.instrument_type}</td>
+                                    <td style={{ padding: '0.75rem' }}>
+                                        {isInWatchlist(inst.instrument_key) ? (
+                                            <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="In Watchlist">
+                                                <Check size={18} />
+                                            </span>
+                                        ) : (
+                                            <button
+                                                className="btn btn-primary"
+                                                onClick={(e) => handleAdd(e, inst)}
+                                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                title="Add to Watchlist"
+                                            >
+                                                <Plus size={16} />
+                                            </button>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

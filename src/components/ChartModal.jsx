@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { selectDailyData } from '../store/dailyDataSlice';
 import { ChartService } from '../services/ChartService';
+import { StrategyService } from '../services/StrategyService';
 import { createChart } from 'lightweight-charts';
 import { EMA, RSI, Stochastic, ADX, ATR } from 'technicalindicators';
 import { X, TrendingUp } from 'lucide-react';
@@ -19,6 +20,7 @@ const ChartModal = ({ instrumentKey, tradingSymbol, onClose }) => {
     const [candles, setCandles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [analysisResult, setAnalysisResult] = useState(null);
 
     // Indicator toggles
     const [showEMA, setShowEMA] = useState(true);
@@ -47,7 +49,7 @@ const ChartModal = ({ instrumentKey, tradingSymbol, onClose }) => {
                 const toDate = new Date().toISOString().split('T')[0];
                 const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-                const response = await ChartService.getHistoricalCandles(token, instrumentKey, toDate, fromDate);
+                const response = await ChartService.getHistoricalCandles(token, instrumentKey, 'hours', 1, toDate, fromDate);
                 const formattedData = ChartService.formatCandleData(response);
 
                 if (formattedData.length === 0) {
@@ -114,6 +116,14 @@ const ChartModal = ({ instrumentKey, tradingSymbol, onClose }) => {
             console.error('Error calculating indicators:', error);
         }
     }, [candles]);
+
+    // Strategy Analysis
+    useEffect(() => {
+        if (candles.length > 50 && tradingSymbol) {
+            const result = StrategyService.analyzeNewOrder(candles, tradingSymbol);
+            setAnalysisResult(result);
+        }
+    }, [candles, tradingSymbol]);
 
     // Main Chart with Candlesticks and EMA
     useEffect(() => {
@@ -454,6 +464,35 @@ const ChartModal = ({ instrumentKey, tradingSymbol, onClose }) => {
                         <X size={24} />
                     </button>
                 </div>
+
+                {/* Strategy Analysis Result */}
+                {analysisResult && (
+                    <div style={{
+                        marginBottom: '1rem',
+                        padding: '1rem',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: analysisResult.action === 'BUY' ? 'rgba(16, 185, 129, 0.2)' :
+                            analysisResult.action === 'SELL' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${analysisResult.action === 'BUY' ? '#10b981' :
+                            analysisResult.action === 'SELL' ? '#ef4444' : 'var(--border-color)'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                    }}>
+                        <div>
+                            <span style={{
+                                fontWeight: 'bold', marginRight: '0.5rem',
+                                color: analysisResult.action === 'BUY' ? '#10b981' :
+                                    analysisResult.action === 'SELL' ? '#ef4444' : 'var(--text-secondary)'
+                            }}>
+                                {analysisResult.action}
+                            </span>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                                {analysisResult.reason}
+                            </span>
+                        </div>
+                    </div>
+                )}
 
                 {/* Indicator Toggles */}
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
