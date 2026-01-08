@@ -4,6 +4,7 @@ import { selectDailyData } from '../store/dailyDataSlice';
 import { UpstoxService } from '../services/UpstoxService';
 import { Briefcase, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ChartModal from '../components/ChartModal';
 
 const Holdings = () => {
     const dailyData = useSelector(selectDailyData);
@@ -12,6 +13,7 @@ const Holdings = () => {
     const [holdings, setHoldings] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [selectedInstrument, setSelectedInstrument] = useState(null);
 
     const fetchHoldings = async () => {
         if (!token) return;
@@ -95,7 +97,19 @@ const Holdings = () => {
                                 const isProfit = stock.pnl >= 0;
 
                                 return (
-                                    <tr key={stock.isin} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                    <tr
+                                        key={stock.isin}
+                                        style={{
+                                            borderBottom: '1px solid var(--border-color)',
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => setSelectedInstrument({
+                                            key: stock.instrument_token,
+                                            symbol: stock.trading_symbol
+                                        })}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
                                         <td style={{ padding: '0.75rem' }}>
                                             <div style={{ fontWeight: '500' }}>{stock.company_name}</div>
                                             <div className="text-secondary" style={{ fontSize: '0.75rem' }}>{stock.trading_symbol}</div>
@@ -123,6 +137,14 @@ const Holdings = () => {
                     </table>
                 </div>
             </div>
+
+            {selectedInstrument && (
+                <ChartModal
+                    instrumentKey={selectedInstrument.key}
+                    tradingSymbol={selectedInstrument.symbol}
+                    onClose={() => setSelectedInstrument(null)}
+                />
+            )}
         </div>
     );
 };

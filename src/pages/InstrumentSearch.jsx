@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { InstrumentService } from '../services/InstrumentService';
 import { Search as SearchIcon, Download, Database, Copy } from 'lucide-react';
+import ChartModal from '../components/ChartModal';
 
 const InstrumentSearch = () => {
     const [segment, setSegment] = useState('NSE');
@@ -10,6 +11,7 @@ const InstrumentSearch = () => {
     const [results, setResults] = useState([]); // Filtered list
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState('');
+    const [selectedInstrument, setSelectedInstrument] = useState(null);
 
     // Load instruments when segment changes
     useEffect(() => {
@@ -149,7 +151,19 @@ const InstrumentSearch = () => {
                                 </tr>
                             )}
                             {results.map((inst, idx) => (
-                                <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                <tr
+                                    key={idx}
+                                    style={{
+                                        borderBottom: '1px solid var(--border-color)',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={() => setSelectedInstrument({
+                                        key: inst.instrument_key,
+                                        symbol: inst.trading_symbol
+                                    })}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
                                     <td style={{ padding: '0.75rem' }}>
                                         <div style={{ fontWeight: '500', color: 'var(--accent-color)' }}>{inst.trading_symbol}</div>
                                     </td>
@@ -157,7 +171,10 @@ const InstrumentSearch = () => {
                                     <td style={{ padding: '0.75rem', fontSize: '0.8em', fontFamily: 'monospace' }}>
                                         {inst.instrument_key}
                                         <button
-                                            onClick={() => handleCopy(inst.instrument_key)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCopy(inst.instrument_key);
+                                            }}
                                             style={{ background: 'none', border: 'none', marginLeft: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer' }}
                                             title="Copy Key"
                                         >
@@ -173,6 +190,14 @@ const InstrumentSearch = () => {
                     </table>
                 </div>
             </div>
+
+            {selectedInstrument && (
+                <ChartModal
+                    instrumentKey={selectedInstrument.key}
+                    tradingSymbol={selectedInstrument.symbol}
+                    onClose={() => setSelectedInstrument(null)}
+                />
+            )}
         </div>
     );
 };
