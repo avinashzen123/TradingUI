@@ -36,3 +36,23 @@ export const isMarketOpen = (exchange) => {
         return { isOpen: false, message: 'Closed (09:15 - 15:15)' };
     }
 };
+
+export const getMarketOpenTime = (exchange) => {
+    const now = new Date();
+    const exchangeCode = exchange ? exchange.toUpperCase() : 'NSE';
+
+    // Create new date object at today's date
+    const openTime = new Date(now);
+    openTime.setSeconds(0);
+    openTime.setMilliseconds(0);
+
+    if (exchangeCode.includes('MCX')) {
+        // MCX Opens 9:00 AM
+        openTime.setHours(9, 0, 0);
+    } else {
+        // NSE Opens 9:15 AM
+        openTime.setHours(9, 15, 0);
+    }
+
+    return openTime;
+};

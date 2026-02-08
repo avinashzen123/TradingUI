@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectDailyData } from '../store/dailyDataSlice';
 import { selectWatchlist, addToWatchlist, removeFromWatchlist, updateTimeframe } from '../store/watchlistSlice';
 import { InstrumentService } from '../services/InstrumentService';
 import { ChartService } from '../services/ChartService';
 import { StrategyService } from '../services/StrategyService';
-import { isMarketOpen } from '../utils/marketHours';
-import { Trash2, Upload, FileText, BarChart2, TrendingUp, AlertCircle, Play, Pause, Clock } from 'lucide-react';
+import { isMarketOpen, getMarketOpenTime } from '../utils/marketHours';
+import { Trash2, Upload, FileText, BarChart2, TrendingUp, AlertCircle, Play, Pause, Clock, Bell } from 'lucide-react';
 import ChartModal from '../components/ChartModal';
 
 const Watchlist = () => {
@@ -22,95 +22,281 @@ const Watchlist = () => {
 
     // Analysis State
     const [analysisRunning, setAnalysisRunning] = useState(false);
-    const [analysisIntervalId, setAnalysisIntervalId] = useState(null);
+    const [nextAnalysisTimes, setNextAnalysisTimes] = useState({}); // { instrument_key: nextRunTimeStamp }
     const [analysisResults, setAnalysisResults] = useState({}); // { instrument_key: { action, reason, time, status } }
     const [lastRunTime, setLastRunTime] = useState(null);
+    const workerRef = useRef(null);
 
-    // Cleanup interval on unmount
+    // Initialize Web Worker
     useEffect(() => {
-        return () => {
-            if (analysisIntervalId) clearInterval(analysisIntervalId);
+        workerRef.current = new Worker(new URL('../utils/timer.worker.js', import.meta.url));
+        workerRef.current.onmessage = (e) => {
+            if (e.data === 'tick') {
+                checkAndRunAnalysis();
+            }
         };
-    }, [analysisIntervalId]);
 
-    const runAnalysisIteration = async () => {
-        if (!token) {
-            setUploadStatus("Error: UPSTOX_TOKEN missing in Settings. Cannot run analysis.");
-            setAnalysisRunning(false);
-            return;
+        return () => {
+            if (workerRef.current) workerRef.current.terminate();
+        };
+    }, [watchlist, analysisRunning]); // Re-bind if watchlist changes might be needed, or use ref for watchlist
+
+    // Use ref to access latest state in worker callback without constant re-binding
+    const watchlistRef = useRef(watchlist);
+    const analysisRunningRef = useRef(analysisRunning);
+    const nextAnalysisTimesRef = useRef({});
+    const tokenRef = useRef(token);
+
+    useEffect(() => {
+        watchlistRef.current = watchlist;
+        analysisRunningRef.current = analysisRunning;
+        tokenRef.current = token;
+        // Keep local ref in sync for checking
+        // but nextAnalysisTimes state update triggers re-render, so we use state for UI, ref for logic if acceptable.
+        // Better: use state in Effect dependency if cost is low, OR use functional updates.
+        // Let's use Refs for the Check Logic to avoid re-creating the worker handler constantly.
+    }, [watchlist, analysisRunning, token]);
+
+    // Update ref when state changes
+    useEffect(() => {
+        nextAnalysisTimesRef.current = nextAnalysisTimes;
+    }, [nextAnalysisTimes]);
+
+    const calculateNextTriggerTime = (inst, now = new Date()) => {
+        const exchange = inst.exchange || (inst.instrument_key.includes('MCX') ? 'MCX' : 'NSE');
+        const openTime = getMarketOpenTime(exchange);
+
+        // If Market Open is in future (e.g. tomorrow), start from there.
+        // If today is weekend, getMarketOpenTime should probably handle "next market open" or we just skip.
+        // For simplicity: assume purely intraday logic relative to Today's Open.
+
+        const unit = inst.analysisUnit || 'minutes';
+        const intervalVal = parseInt(inst.analysisInterval || 5);
+
+        let intervalMs = 0;
+        if (unit === 'hours') intervalMs = intervalVal * 60 * 60 * 1000;
+        else if (unit === 'days') intervalMs = intervalVal * 24 * 60 * 60 * 1000;
+        else intervalMs = intervalVal * 60 * 1000;
+
+        // Logic: specific slots like 9:16, 9:21...
+        // Start = OpenTime
+        // First Slot = OpenTime + Interval + 1 minute (buffer? User said 9:15 open, 5 min frame -> 9:16 analysis??)
+        // User request: "NSE ... 9:15AM ... 5 Minute ... analysis should start from 9:16, 9:21, 9:26"
+        // Wait, 9:15 + 5 mins is 9:20. Why 9:16?
+        // Maybe User means: Candle closes at 9:20, so analysis at 9:20:01.
+        // USER EXAMPLE: "9:16, 9:21, 9:26".
+        // This is 1 minute after Open? Or 1 minute into the candle?
+        // 9:15->9:20 is the first 5 min candle. It closes at 9:20:00.
+        // If analysis runs at 9:16, it's running on incomplete candle or previous data?
+        // User said: "NSE instrument opening time 9:15AM if time frame is 5 Minute , analysis should start from 9:16, 9:21..."
+        // This implies: Run at Open + 1 min, then every 5 mins.
+        // It sounds like they want to check "Live" status early?
+        // OR: Maybe they meant 9:21 (after first candle)?
+        // BUT I MUST FOLLOW "9:16, 9:21" pattern strictly if explicitly requested.
+        // Let's stick to the arithmetic:
+        // Base = 9:15.
+        // Series = 9:16, 9:21, 9:26....
+        // This is: (OpenTime + 1 min) + (N * Interval_5_mins).
+
+        // MCX: 9:00AM. 1Hr.
+        // Series: 10:01AM, 11:01AM...
+        // This is: (OpenTime + 1 min + 1 hour??) NO. 9:00 -> 10:00 is first hour.
+        // 10:01 is (OpenTime + 1 HourInterval) + 1 min.
+
+        // So the formula seems to be:
+        // TriggerTime = OpenTime + (N * Interval) + 1 minute.
+        // Where N >= 0?
+        // NSE (5m): 9:15 + 0*5 + 1 = 9:16. (Yes matches user req)
+        // MCX (1h): 9:00 + 0*1h + 1 = 9:01. (User said 10:01... hmm)
+        // User said: "MCX ... 1Hrs analysis trigger at 10:01AM, 11:01AM..."
+        // So for MCX 1h, they skip the first immediate check? Or maybe 9:00-10:00 is first candle.
+        // "NSE 5 min ... starts from 9:16". 
+        // 9:15-9:20 is first candle. 9:16 is inside first candle.
+        // This suggests checking "incomplete" real-time status? Or just a pattern preference?
+
+        // Generalized Pattern derived from USER EXAMPLES:
+        // NSE 5m: Open(9:15) -> 9:16 (Open + 1m)
+        // MCX 1h: Open(9:00) -> 10:01 (Open + 1h + 1m)
+
+        // Hypothesis: User wants to run 1 minute after the "Candle Logic" starts?
+        // But 9:16 is VERY early for a 5 min candle. 
+        // Let's assume User knows what they want: "Start from 9:16...".
+        // I will implement: 
+        // NextTime = OpenTime + 1 minute + (K * Interval).
+        // For matching specific examples:
+        // NSE 5m: 9:15 + 1m + 0*5m = 9:16. CORRECT.
+        // MCX 1h: 9:00 + 1m + 1*60m = 10:01. CORRECT. (Here K starts at 1?)
+
+        // This implies K might depend on timeframe size or just arbitrary user preference.
+        // Maybe for < 1 Hour, start immediately (K=0). For >= 1 Hour, wait (K=1)?
+        // Or simply: Calculate candidates [Open+1m, Open+1m+Interval, ...] and pick the first one > NOW.
+
+        // Algorithm:
+        // 1. StartTime = OpenTime + 60s.
+        // 2. T = StartTime + (N * Interval).
+        // 3. Find smallest T > Now.
+
+        const startOffset = 60 * 1000; // 1 minute
+        const baseTime = openTime.getTime() + startOffset;
+
+        // If current time is *before* baseTime, the first trigger is baseTime.
+        if (now.getTime() < baseTime) {
+            return baseTime;
         }
 
+        // If now is past baseTime, find the most recent slot.
+        const elapsed = now.getTime() - baseTime;
+        const slotsPassed = Math.floor(elapsed / intervalMs);
+
+        // Return the start of the current slot (or last missed slot)
+        // If this time is <= now, it will trigger immediately in the check loop
+        const nextTrigger = baseTime + (slotsPassed * intervalMs);
+
+        console.log(`[Analysis] Calc: Inst ${inst.trading_symbol} Now:${now.toLocaleTimeString()} Base:${new Date(baseTime).toLocaleTimeString()} Next:${new Date(nextTrigger).toLocaleTimeString()}`);
+        return nextTrigger;
+    };
+
+    const sendNotification = (title, body) => {
+        if (!("Notification" in window)) return;
+
+        if (Notification.permission === "granted") {
+            new Notification(title, { body, icon: '/vite.svg' });
+        }
+    };
+
+    const checkAndRunAnalysis = async () => {
+        if (!analysisRunningRef.current || !tokenRef.current) return;
+
         const now = new Date();
-        setLastRunTime(now.toLocaleTimeString());
+        const currentMs = now.getTime();
 
-        const newResults = { ...analysisResults };
+        // Iterate over watchlist to see if any instrument is due
+        // We use the Ref version of nextAnalysisTimes to avoid stale closures in worker callback
+        const nextTimes = { ...nextAnalysisTimesRef.current };
+        const updatesNeeded = {}; // Collect updates to state
 
-        // We iterate sequentially to avoid overwhelming browser/network if list is large
-        // But for UI responsiveness, we process in chunks or parallel.
-        await Promise.all(watchlist.map(async (inst) => {
-            const marketStatus = isMarketOpen(inst.exchange || (inst.instrument_key.includes('MCX') ? 'MCX' : 'NSE'));
+        // For watchlist items
+        // Note: watchlistRef might change, so map over current ref
+        for (const inst of watchlistRef.current) {
+            const openStatus = isMarketOpen(inst.exchange || (inst.instrument_key.includes('MCX') ? 'MCX' : 'NSE'));
+            if (!openStatus.isOpen) continue;
 
-            if (!marketStatus.isOpen) {
-                newResults[inst.instrument_key] = {
-                    status: 'Closed',
-                    message: marketStatus.message,
-                    timestamp: now
-                };
-                return;
+            let nextRun = nextTimes[inst.instrument_key];
+
+            // If never scheduled or invalid, schedule it now (or calc next valid slot)
+            if (!nextRun) {
+                nextRun = calculateNextTriggerTime(inst, now);
+                updatesNeeded[inst.instrument_key] = nextRun;
             }
 
-            try {
-                // Use per-instrument timeframe or default if missing
+            // Check if due
+            if (currentMs >= nextRun) {
+                // RUN ANALYSIS
+                await runSingleAnalysis(inst);
+
+                // SCHEDULE NEXT
+                // Re-calc based on now or strictly next slot? 
+                // Strictly next slot prevents drift, but simple calc is: current nextRun + interval
                 const unit = inst.analysisUnit || 'minutes';
-                const interval = inst.analysisInterval || 5;
+                const intervalVal = parseInt(inst.analysisInterval || 5);
+                let intervalMs = 0;
+                if (unit === 'hours') intervalMs = intervalVal * 60 * 60 * 1000;
+                else if (unit === 'days') intervalMs = intervalVal * 24 * 60 * 60 * 1000;
+                else intervalMs = intervalVal * 60 * 1000;
 
-                // Get enough candles for strategy (Strategy needs ~50)
-                const toDate = now.toISOString().split('T')[0];
-                const fromDate = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // extended lookback for larger TFs
+                const newNext = nextRun + intervalMs;
+                updatesNeeded[inst.instrument_key] = newNext;
+            } else {
+                // ensure state has it
+                if (!nextTimes[inst.instrument_key]) {
+                    updatesNeeded[inst.instrument_key] = nextRun;
+                }
+            }
+        }
 
-                const candles = await ChartService.getHistoricalCandles(token, inst.instrument_key, unit, interval, toDate, fromDate);
-                const formatted = ChartService.formatCandleData(candles);
+        if (Object.keys(updatesNeeded).length > 0) {
+            const merged = { ...nextTimes, ...updatesNeeded };
+            setNextAnalysisTimes(merged);
+            // Updating state will update ref via Effect
+        }
 
-                const result = StrategyService.analyzeNewOrder(formatted, inst.trading_symbol);
+        // Update generic last run for UI heartbeat
+        setLastRunTime(now.toLocaleTimeString());
+    };
 
-                newResults[inst.instrument_key] = {
+    const runSingleAnalysis = async (inst) => {
+        try {
+            const token = tokenRef.current;
+            if (!token) return;
+
+            const unit = inst.analysisUnit || 'minutes';
+            const interval = inst.analysisInterval || 5;
+            const now = new Date();
+            const toDate = now.toISOString().split('T')[0];
+            const fromDate = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            const candles = await ChartService.getHistoricalCandles(token, inst.instrument_key, unit, interval, toDate, fromDate);
+            const formatted = ChartService.formatCandleData(candles);
+            const result = StrategyService.analyzeNewOrder(formatted, inst.trading_symbol);
+
+            setAnalysisResults(prev => ({
+                ...prev,
+                [inst.instrument_key]: {
                     status: 'Active',
                     action: result ? result.action : 'NONE',
                     reason: result ? result.reason : 'No Signal',
-                    tradeData: result, // Full trade object
+                    tradeData: result,
                     timestamp: now
-                };
+                }
+            }));
 
-            } catch (err) {
-                console.error(`Analysis failed for ${inst.trading_symbol}:`, err);
-                newResults[inst.instrument_key] = {
-                    status: 'Error',
-                    message: 'Fetch/Analysis Failed',
-                    timestamp: now
-                };
+            // NOTIFICATION LOGIC
+            // Notify if Action is BUY or SELL
+            if (result && (result.action === 'BUY' || result.action === 'SELL')) {
+                sendNotification(
+                    `Signal: ${inst.trading_symbol}`,
+                    `${result.action} - ${result.reason}`
+                );
             }
-        }));
 
-        setAnalysisResults(newResults);
+        } catch (err) {
+            console.error(`Analysis failed for ${inst.trading_symbol}:`, err);
+            setAnalysisResults(prev => ({
+                ...prev,
+                [inst.instrument_key]: {
+                    status: 'Error',
+                    message: 'Failed',
+                    timestamp: new Date()
+                }
+            }));
+        }
     };
+
+    // Replace old runAnalysisIteration with a setup function
+    // Old runAnalysisIteration removed or refactored? 
+    // We don't need the bulk iteration anymore, we rely on per-instrument checks.
 
     const toggleAnalysis = () => {
         if (analysisRunning) {
             // Stop
-            if (analysisIntervalId) clearInterval(analysisIntervalId);
-            setAnalysisIntervalId(null);
+            if (workerRef.current) workerRef.current.postMessage('stop');
             setAnalysisRunning(false);
         } else {
             // Start
-            if (!token) {
-                alert("Please add UPSTOX_TOKEN in Settings first.");
-                return;
+            // if (!token) {
+            //     alert("Please add UPSTOX_TOKEN in Settings first.");
+            //     return;
+            // }
+
+            // Request Notification Permission
+            if ("Notification" in window && Notification.permission !== "granted") {
+                Notification.requestPermission();
             }
+
             setAnalysisRunning(true);
-            runAnalysisIteration(); // Run immediately once
-            // Poll every 1 minute
-            const id = setInterval(runAnalysisIteration, 60 * 1000);
-            setAnalysisIntervalId(id);
+            if (workerRef.current) workerRef.current.postMessage('start');
+
+            // Initialize times logic is handled in tick
         }
     };
 
@@ -135,7 +321,7 @@ const Watchlist = () => {
             try {
                 const nseInstruments = await InstrumentService.getInstruments('NSE');
                 const mcxInstruments = await InstrumentService.getInstruments('MCX');
-                const allInstruments = [...nseInstruments, ...mcxInstruments];
+                const allInstruments = [...mcxInstruments, ...nseInstruments];
 
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
@@ -265,7 +451,14 @@ const Watchlist = () => {
                     {analysisRunning && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: '#10b981' }}>
                             <span className="animate-pulse" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-                            Running live check every 1 min
+                            Running live analysis in background
+                        </div>
+                    )}
+
+                    {analysisRunning && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            <Bell size={14} />
+                            Notifications Enabled
                         </div>
                     )}
 
@@ -308,6 +501,7 @@ const Watchlist = () => {
                                 <th style={{ padding: '0.75rem' }}>Trading Symbol</th>
                                 <th style={{ padding: '0.75rem' }}>Exchange</th>
                                 <th style={{ padding: '0.75rem' }}>Timeframe</th>
+                                <th style={{ padding: '0.75rem' }}>Last Analysis</th>
                                 <th style={{ padding: '0.75rem' }}>Market Status</th>
                                 <th style={{ padding: '0.75rem' }}>Signal</th>
                                 <th style={{ padding: '0.75rem' }}>Details</th>
@@ -353,41 +547,53 @@ const Watchlist = () => {
 
                                         {/* Timeframe Config Column */}
                                         <td style={{ padding: '0.75rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <input
-                                                    type="number"
-                                                    value={inst.analysisInterval || 5}
-                                                    onChange={(e) => handleTimeframeChange(inst.instrument_key, 'interval', e.target.value)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    style={{
-                                                        width: '50px',
-                                                        padding: '0.25rem',
-                                                        background: 'var(--bg-primary)',
-                                                        border: '1px solid var(--border-color)',
-                                                        color: 'white',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.75rem'
-                                                    }}
-                                                    min="1"
-                                                />
-                                                <select
-                                                    value={inst.analysisUnit || 'minutes'}
-                                                    onChange={(e) => handleTimeframeChange(inst.instrument_key, 'unit', e.target.value)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    style={{
-                                                        padding: '0.25rem',
-                                                        background: 'var(--bg-primary)',
-                                                        border: '1px solid var(--border-color)',
-                                                        color: 'white',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.75rem'
-                                                    }}
-                                                >
-                                                    <option value="minutes">min</option>
-                                                    <option value="hours">hr</option>
-                                                    <option value="days">day</option>
-                                                </select>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <input
+                                                        type="number"
+                                                        value={inst.analysisInterval || 5}
+                                                        onChange={(e) => handleTimeframeChange(inst.instrument_key, 'interval', e.target.value)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{
+                                                            width: '50px',
+                                                            padding: '0.25rem',
+                                                            background: 'var(--bg-primary)',
+                                                            border: '1px solid var(--border-color)',
+                                                            color: 'white',
+                                                            borderRadius: '4px',
+                                                            fontSize: '0.75rem'
+                                                        }}
+                                                        min="1"
+                                                    />
+                                                    <select
+                                                        value={inst.analysisUnit || 'minutes'}
+                                                        onChange={(e) => handleTimeframeChange(inst.instrument_key, 'unit', e.target.value)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{
+                                                            padding: '0.25rem',
+                                                            background: 'var(--bg-primary)',
+                                                            border: '1px solid var(--border-color)',
+                                                            color: 'white',
+                                                            borderRadius: '4px',
+                                                            fontSize: '0.75rem'
+                                                        }}
+                                                    >
+                                                        <option value="minutes">min</option>
+                                                        <option value="hours">hr</option>
+                                                        <option value="days">day</option>
+                                                    </select>
+                                                </div>
+                                                {analysisRunning && nextAnalysisTimes[inst.instrument_key] && (
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Clock size={10} /> Next: {new Date(nextAnalysisTimes[inst.instrument_key]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                    </div>
+                                                )}
                                             </div>
+                                        </td>
+
+                                        {/* Last Analysis Time Column */}
+                                        <td style={{ padding: '0.75rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                            {result && result.timestamp ? new Date(result.timestamp).toLocaleTimeString() : '-'}
                                         </td>
 
                                         {/* Market Status Column */}

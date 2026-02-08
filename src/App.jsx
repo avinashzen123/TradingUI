@@ -1,11 +1,14 @@
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart2, Settings, Briefcase, Search } from 'lucide-react';
+import { LayoutDashboard, List, BarChart2, Settings as SettingsIcon, Briefcase, Search } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import OrderManagement from './pages/Orders';
 import Holdings from './pages/Holdings';
 import InstrumentSearch from './pages/InstrumentSearch';
 import DataUploader from './components/DataUploader';
+import Header from './components/Header';
+import Footer from './components/Footer';
 import Watchlist from './pages/Watchlist';
+import Settings from './pages/Settings';
 import './App.css';
 
 function App() {
@@ -89,32 +92,25 @@ function App() {
                 color: isActive ? 'white' : 'var(--text-secondary)'
               })}
             >
-              <Settings size={18} /> Settings
+              <SettingsIcon size={18} /> Settings
             </NavLink>
           </nav>
         </aside>
 
         <main className="main-content">
-          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: '600' }}>Trading Interface</h1>
-            <div className="btn" style={{ border: '1px solid var(--border-color)', fontSize: '0.875rem' }}>
-              User: Demo Account
-            </div>
-          </header>
+          <Header />
+          <div style={{ flex: 1 }}>
 
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/watchlist" element={<Watchlist />} />
-            <Route path="/orders" element={<OrderManagement />} />
-            <Route path="/holdings" element={<Holdings />} />
-            <Route path="/search" element={<InstrumentSearch />} />
-            <Route path="/settings" element={
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <DataUploader />
-                <div className="card">Other settings coming soon...</div>
-              </div>
-            } />
-          </Routes>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/watchlist" element={<Watchlist />} />
+              <Route path="/orders" element={<OrderManagement />} />
+              <Route path="/holdings" element={<Holdings />} />
+              <Route path="/search" element={<InstrumentSearch />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </div>
+          <Footer />
         </main>
       </div>
     </Router>
