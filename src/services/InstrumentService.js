@@ -4,9 +4,16 @@ const DB_NAME = 'TradingAppDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'instruments';
 
+// Use direct Upstox URLs in production, proxy in development
+const getBaseURL = () => {
+    // Check if we're in development (Vite dev server)
+    const isDevelopment = import.meta.env.DEV;
+    return isDevelopment ? '/api/assets' : 'https://assets.upstox.com';
+};
+
 const URLs = {
-    NSE: '/api/assets/market-quote/instruments/exchange/NSE.json.gz',
-    MCX: '/api/assets/market-quote/instruments/exchange/MCX.json.gz'
+    NSE: () => `${getBaseURL()}/market-quote/instruments/exchange/NSE.json.gz`,
+    MCX: () => `${getBaseURL()}/market-quote/instruments/exchange/MCX.json.gz`
 };
 
 // IndexedDB Helper
@@ -65,7 +72,9 @@ export const InstrumentService = {
         // 2. Fetch & Decompress
         console.log(`[InstrumentService] Fetching new data for ${segment}`);
         try {
-            const response = await fetch(URLs[segment]);
+            const url = URLs[segment]();
+            console.log(`[InstrumentService] Fetching from: ${url}`);
+            const response = await fetch(url);
             if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
             const arrayBuffer = await response.arrayBuffer();

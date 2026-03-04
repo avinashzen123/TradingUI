@@ -1,3 +1,9 @@
+// Use direct Upstox URLs in production, proxy in development
+const getBaseURL = () => {
+    const isDevelopment = import.meta.env.DEV;
+    return isDevelopment ? '/api/upstox' : 'https://api.upstox.com';
+};
+
 const validateCandleParams = (unit, interval) => {
     const validUnits = ['minutes', 'hours', 'days', 'weeks', 'months'];
     if (!validUnits.includes(unit)) {
@@ -164,7 +170,7 @@ export const ChartService = {
                 adjusted: dateRange.adjusted 
             });
             
-            const url = `/api/upstox/v3/historical-candle/${instrumentKey}/${unit}/${interval}/${toDate}/${fromDate}`;
+            const url = `${getBaseURL()}/v3/historical-candle/${instrumentKey}/${unit}/${interval}/${toDate}/${fromDate}`;
             console.log('[ChartService.getHistoricalCandles] Full API URL:', url);
             console.log('[ChartService.getHistoricalCandles] Date range being sent:', {
                 from: fromDate,
@@ -233,7 +239,7 @@ export const ChartService = {
             });
             
             validateCandleParams(unit, interval);
-            const url = `/api/upstox/v3/historical-candle/intraday/${instrumentKey}/${unit}/${interval}`;
+            const url = `${getBaseURL()}/v3/historical-candle/intraday/${instrumentKey}/${unit}/${interval}`;
             console.log('[ChartService.getIntradayCandles] URL:', url);
             
             const response = await fetch(url, {

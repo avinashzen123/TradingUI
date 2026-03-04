@@ -1,10 +1,16 @@
-const UPSTOX_BASE_URL = '/api/upstox/v2';
-const UPSTOX_BASE_URL_v3 = '/api/upstox/v3';
+// Use direct Upstox URLs in production, proxy in development
+const getBaseURL = () => {
+    const isDevelopment = import.meta.env.DEV;
+    return isDevelopment ? '/api/upstox' : 'https://api.upstox.com';
+};
+
+const UPSTOX_BASE_URL = () => `${getBaseURL()}/v2`;
+const UPSTOX_BASE_URL_v3 = () => `${getBaseURL()}/v3`;
 
 export const UpstoxService = {
     getHoldings: async (token) => {
         try {
-            const response = await fetch(`${UPSTOX_BASE_URL}/portfolio/long-term-holdings`, {
+            const response = await fetch(`${UPSTOX_BASE_URL()}/portfolio/long-term-holdings`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -27,7 +33,7 @@ export const UpstoxService = {
 
     getShortTermPositions: async (token) => {
         try {
-            const response = await fetch(`${UPSTOX_BASE_URL}/portfolio/short-term-positions`, {
+            const response = await fetch(`${UPSTOX_BASE_URL()}/portfolio/short-term-positions`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
