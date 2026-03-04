@@ -1,0 +1,32 @@
+﻿// Add after plotOverlayIndicator function, before plotSeparateIndicator
+
+        else if (indicator.id === 'wma') {
+            const period = indicator.params.period || 20;
+            const values = WMA.calculate({ values: closes, period });
+            const data = candleData.slice(period - 1).map((candle, idx) => ({
+                time: candle.time, value: values[idx],
+            }));
+            const series = chart.addLineSeries({
+                color: indicator.color, lineWidth: 2, title: `${indicator.name} (${period})`,
+            });
+            series.setData(data);
+            mainChartRef.current.indicatorSeries[`${indicator.id}_${period}`] = series;
+        }
+        else if (indicator.id === 'vwap') {
+            // VWAP requires volume data - skip if not available
+            if (!candleData[0].volume) return;
+            const values = VWAP.calculate({
+                high: candleData.map(c => c.high),
+                low: candleData.map(c => c.low),
+                close: closes,
+                volume: candleData.map(c => c.volume || 0),
+            });
+            const data = candleData.map((candle, idx) => ({
+                time: candle.time, value: values[idx],
+            }));
+            const series = chart.addLineSeries({
+                color: indicator.color, lineWidth: 2, title: indicator.name,
+            });
+            series.setData(data);
+            mainChartRef.current.indicatorSeries['vwap'] = series;
+        }

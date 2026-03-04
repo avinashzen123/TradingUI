@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Downloaded instrument files (regenerated on build)
+public/instruments/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

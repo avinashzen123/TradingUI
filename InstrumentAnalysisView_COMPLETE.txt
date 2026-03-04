@@ -1,0 +1,23 @@
+INSTRUCTIONS:
+1. Delete src/components/InstrumentAnalysisView.jsx
+2. Create new src/components/InstrumentAnalysisView.jsx
+3. Copy ALL content below the line into the new file
+4. Save and refresh browser
+
+================================================================================
+
+The complete file content is in INDICATOR_ADDITIONS.md with all the code snippets.
+
+Due to file size and operation issues, please manually:
+1. Open src/components/InstrumentAnalysisView.jsx in your editor
+2. Delete all content
+3. Copy the complete implementation from the working backup or recreate using the code in INDICATOR_ADDITIONS.md
+
+The file should be approximately 400-450 lines with:
+- All imports including WMA, Stochastic, CCI, MFI, ADX, ATR, ROC, WilliamsR, VWAP
+- plotOverlayIndicator function with SMA, EMA, WMA, BB, VWAP
+- plotSeparateIndicator function with RSI, MACD, Stochastic, CCI, MFI, ADX, ATR, ROC, WilliamsR
+- Complete JSX return statement
+- getRSIClass helper function
+
+All code is documented in INDICATOR_ADDITIONS.md and ALL_INDICATORS_COMPLETE.md

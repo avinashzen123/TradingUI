@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "download-instruments": "node scripts/download-instruments.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

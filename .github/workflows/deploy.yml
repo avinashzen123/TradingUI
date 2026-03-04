@@ -24,6 +24,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download instrument files
+        run: |
+          mkdir -p public/instruments
+          echo "📥 Downloading instrument files from Upstox..."
+          curl -L -o public/instruments/NSE.json.gz https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz || echo "⚠️ NSE download failed"
+          curl -L -o public/instruments/MCX.json.gz https://assets.upstox.com/market-quote/instruments/exchange/MCX.json.gz || echo "⚠️ MCX download failed"
+          echo "📁 Downloaded files:"
+          ls -lh public/instruments/ || echo "No files downloaded"
+        continue-on-error: true
+
       - name: Build project
         run: npm run build
         env:
