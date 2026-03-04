@@ -4,7 +4,7 @@ import { selectDailyData } from '../store/dailyDataSlice';
 import { selectWatchlist, addToWatchlist, removeFromWatchlist, updateTimeframe } from '../store/watchlistSlice';
 import { InstrumentService } from '../services/InstrumentService';
 import { ChartService } from '../services/ChartService';
-import { StrategyService } from '../services/StrategyService';
+import { analyzeWithStrategies } from '../strategy_v1';
 import { isMarketOpen, getMarketOpenTime } from '../utils/marketHours';
 import { Trash2, Upload, FileText, BarChart2, TrendingUp, AlertCircle, Play, Pause, Clock, Bell } from 'lucide-react';
 import ChartModal from '../components/ChartModal';
@@ -237,14 +237,14 @@ const Watchlist = () => {
 
             const candles = await ChartService.getHistoricalCandles(token, inst.instrument_key, unit, interval, toDate, fromDate);
             const formatted = ChartService.formatCandleData(candles);
-            const result = StrategyService.analyzeNewOrder(formatted, inst.trading_symbol);
+            const result = analyzeWithStrategies(inst.trading_symbol, formatted);
 
             setAnalysisResults(prev => ({
                 ...prev,
                 [inst.instrument_key]: {
                     status: 'Active',
-                    action: result ? result.action : 'NONE',
-                    reason: result ? result.reason : 'No Signal',
+                    action: result ? result.signal : 'NONE',
+                    reason: result ? result.message : 'No Signal',
                     tradeData: result,
                     timestamp: now
                 }

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { selectDailyData } from '../store/dailyDataSlice';
 import { ChartService } from '../services/ChartService';
-import { StrategyService } from '../services/StrategyService';
+import { analyzeWithStrategies } from '../strategy_v1';
 import { createChart } from 'lightweight-charts';
 import { EMA, RSI, Stochastic, ADX, ATR } from 'technicalindicators';
 import { X, TrendingUp } from 'lucide-react';
@@ -120,7 +120,7 @@ const ChartModal = ({ instrumentKey, tradingSymbol, onClose }) => {
     // Strategy Analysis
     useEffect(() => {
         if (candles.length > 50 && tradingSymbol) {
-            const result = StrategyService.analyzeNewOrder(candles, tradingSymbol);
+            const result = analyzeWithStrategies(tradingSymbol, candles);
             setAnalysisResult(result);
         }
     }, [candles, tradingSymbol]);

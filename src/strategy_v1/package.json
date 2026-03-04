@@ -1,0 +1,17 @@
+{
+  "name": "strategy_v1",
+  "version": "1.0.0",
+  "description": "Trading strategies implementation - JavaScript port of Python strategy_v1",
+  "main": "index.js",
+  "type": "module",
+  "keywords": [
+    "trading",
+    "strategy",
+    "technical-analysis",
+    "rsi",
+    "ema",
+    "indicators"
+  ],
+  "author": "",
+  "license": "MIT"
+}
