@@ -12,6 +12,7 @@ import './utils/migrateIndicators'; // Auto-migrate indicators on app load
 import Footer from './components/Footer';
 import Watchlist from './pages/Watchlist';
 import Settings from './pages/Settings';
+import AlertsPanel from './components/AlertsPanel';
 import './App.css';
 
 function App() {
@@ -140,6 +141,8 @@ function App() {
 
         <main className="main-content">
           <Header />
+          {/* Global Alerts Panel - Available in all views */}
+          <AlertsPanel />
           <div style={{ flex: 1 }}>
 
             <Routes>

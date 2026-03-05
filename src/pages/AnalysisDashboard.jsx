@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { selectAllInstruments, addInstrument, removeInstrument } from '../store/instrumentAnalysisSlice';
 import { InstrumentService } from '../services/InstrumentService';
 import InstrumentAnalysisView from '../components/InstrumentAnalysisView';
-import AlertsPanel from '../components/AlertsPanel';
 import { Search, X, Plus, List } from 'lucide-react';
 import '../components/InstrumentAnalysis.css';
 
@@ -95,9 +94,6 @@ export default function AnalysisDashboard() {
 
     return (
         <div className="analysis-dashboard">
-            {/* Alerts Panel - Fixed position */}
-            <AlertsPanel />
-
             {/* Mobile Overlay */}
             <div 
                 className={`mobile-sidebar-overlay ${showMobileSidebar ? 'active' : ''}`}
